@@ -1,5 +1,7 @@
 from sklearn.impute import KNNImputer
 from utils import *
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def knn_impute_by_user(matrix, valid_data, k):
@@ -37,7 +39,10 @@ def knn_impute_by_item(matrix, valid_data, k):
     # TODO:                                                             #
     # Implement the function as described in the docstring.             #
     #####################################################################
-    acc = None
+    nbrs = KNNImputer(n_neighbors=k)
+    mat = nbrs.fit_transform(np.transpose(matrix))
+    acc = sparse_matrix_evaluate(valid_data, np.transpose(mat))
+    print("Validation Accuracy: {}".format(acc))
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -60,7 +65,30 @@ def main():
     # the best performance and report the test accuracy with the        #
     # chosen k*.                                                        #
     #####################################################################
-    pass
+    ks = [1, 6, 11, 16, 21, 26]
+    # user knn
+    # print("training user knn")
+    # user_acc = []
+    # for k in ks:
+    #     user_acc.append(knn_impute_by_user(sparse_matrix, val_data, k))
+    # plt.figure()
+    # plt.plot(ks, user_acc)
+    # plt.xlabel("k")
+    # plt.ylabel("accuracy")
+    # plt.title("user knn")
+    # plt.show()
+
+    # question knn
+    print("\ntraining question knn")
+    item_acc = []
+    for k in ks:
+        item_acc.append(knn_impute_by_item(sparse_matrix, val_data, k))
+    plt.figure()
+    plt.plot(ks, item_acc)
+    plt.xlabel("k")
+    plt.ylabel("accuracy")
+    plt.title("question knn")
+    plt.show()
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
