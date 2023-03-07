@@ -67,19 +67,22 @@ def main():
     #####################################################################
     ks = [1, 6, 11, 16, 21, 26]
     # user knn
-    # print("training user knn")
-    # user_acc = []
-    # for k in ks:
-    #     user_acc.append(knn_impute_by_user(sparse_matrix, val_data, k))
-    # plt.figure()
-    # plt.plot(ks, user_acc)
-    # plt.xlabel("k")
-    # plt.ylabel("accuracy")
-    # plt.title("user knn")
-    # plt.show()
+    print("training user knn")
+    user_acc = []
+    for k in ks:
+        user_acc.append(knn_impute_by_user(sparse_matrix, val_data, k))
+    plt.figure()
+    plt.plot(ks, user_acc)
+    plt.xlabel("k")
+    plt.ylabel("accuracy")
+    plt.title("user kNN")
+    plt.show()
+
+    # student test accuracy
+    knn_impute_by_user(sparse_matrix, test_data, 11)
 
     # question knn
-    print("\ntraining question knn")
+    print("\ntraining item knn")
     item_acc = []
     for k in ks:
         item_acc.append(knn_impute_by_item(sparse_matrix, val_data, k))
@@ -87,8 +90,11 @@ def main():
     plt.plot(ks, item_acc)
     plt.xlabel("k")
     plt.ylabel("accuracy")
-    plt.title("question knn")
+    plt.title("item kNN")
     plt.show()
+
+    # item test accuracy
+    knn_impute_by_item(sparse_matrix, test_data, 21)
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
