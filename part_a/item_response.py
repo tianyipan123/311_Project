@@ -1,6 +1,7 @@
 from utils import *
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def sigmoid(x):
@@ -14,8 +15,7 @@ def neg_log_likelihood(data, theta, beta):
 
     You may optionally replace the function arguments to receive a matrix.
 
-    :param data: A dictionary {user_id: list, question_id: list,
-    is_correct: list}
+    :param data: 2D sparse matrix
     :param theta: Vector
     :param beta: Vector
     :return: float
@@ -24,7 +24,9 @@ def neg_log_likelihood(data, theta, beta):
     # TODO:                                                             #
     # Implement the function as described in the docstring.             #
     #####################################################################
-    log_lklihood = 0.
+    diff_mat = create_diff_mat(data.shape, theta, beta)
+    prob_mat = data.toarray() * diff_mat - np.log(1 + np.exp(diff_mat))
+    log_lklihood = np.nansum(prob_mat)
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -41,8 +43,7 @@ def update_theta_beta(data, lr, theta, beta):
 
     You may optionally replace the function arguments to receive a matrix.
 
-    :param data: A dictionary {user_id: list, question_id: list,
-    is_correct: list}
+    :param data: 2D sparse matrix
     :param lr: float
     :param theta: Vector
     :param beta: Vector
@@ -52,7 +53,16 @@ def update_theta_beta(data, lr, theta, beta):
     # TODO:                                                             #
     # Implement the function as described in the docstring.             #
     #####################################################################
-    pass
+    data = data.toarray()
+    # update theta
+    sum_I = np.nansum(data, axis=1)
+    diff_mat = create_diff_mat(data.shape, theta, beta)
+    theta += lr * (sum_I - np.nansum(sigmoid(diff_mat), axis=1))
+
+    # update beta
+    diff_mat = create_diff_mat(data.shape, theta, beta)
+    sum_J = np.nansum(data, axis=0)
+    beta += lr * (-sum_J + np.nansum(sigmoid(diff_mat), axis=0))
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -64,8 +74,7 @@ def irt(data, val_data, lr, iterations):
 
     You may optionally replace the function arguments to receive a matrix.
 
-    :param data: A dictionary {user_id: list, question_id: list,
-    is_correct: list}
+    :param data: 2D sparse matrix
     :param val_data: A dictionary {user_id: list, question_id: list,
     is_correct: list}
     :param lr: float
@@ -73,8 +82,9 @@ def irt(data, val_data, lr, iterations):
     :return: (theta, beta, val_acc_lst)
     """
     # TODO: Initialize theta and beta.
-    theta = None
-    beta = None
+    shape = data.shape
+    theta = np.random.randn(shape[0])
+    beta = np.random.randn(shape[1])
 
     val_acc_lst = []
 
@@ -120,7 +130,13 @@ def main():
     # Tune learning rate and number of iterations. With the implemented #
     # code, report the validation and test accuracy.                    #
     #####################################################################
-    pass
+    lr = 0.002
+    num_iteration = 100
+    # train model
+    theta, beta, val_acc_lst = irt(sparse_matrix, val_data, lr, num_iteration)
+    # evaluate final accuracy
+    print(f"valid accuracy is {evaluate(val_data, theta, beta)}")
+    print(f"test accuracy is {evaluate(test_data, theta, beta)}")
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -129,10 +145,36 @@ def main():
     # TODO:                                                             #
     # Implement part (d)                                                #
     #####################################################################
-    pass
+    j1, j2, j3 = 10, 100, 1000
+    js = [j1, j2, j3]
+    plt.figure()
+    theta_x = np.linspace(0, max(theta) * 2, 100)
+    for j in js:
+        plt.plot(theta_x, sigmoid(theta_x - beta[j]), label="j = " + str(j))
+    plt.xlabel(r"$\theta$")
+    plt.ylabel("Probability")
+    plt.title(r"Probability of Correctness vs. $\theta$")
+    plt.legend()
+    plt.show()
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
+
+
+def create_diff_mat(shape, theta, beta):
+    """Create the difference matrix of given shape with each entry equal to
+    theta[i] - beta[j].
+
+    :param shape: 2-tuple
+    :param theta: Vector
+    :param beta: Vector
+    """
+    theta = theta[:, np.newaxis]
+    beta = beta[:, np.newaxis]
+    inner_mat = np.zeros(shape)
+    inner_mat -= beta.reshape(1, -1)
+    inner_mat += theta
+    return inner_mat
 
 
 if __name__ == "__main__":
