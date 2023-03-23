@@ -55,14 +55,12 @@ def update_theta_beta(data, lr, theta, beta):
     #####################################################################
     data = data.toarray()
     # update theta
-    sum_I = np.nansum(data, axis=1)
     diff_mat = create_diff_mat(data.shape, theta, beta)
-    theta += lr * (sum_I - np.nansum(sigmoid(diff_mat), axis=1))
+    theta += lr * np.nansum(data - sigmoid(diff_mat), axis=1)
 
     # update beta
     diff_mat = create_diff_mat(data.shape, theta, beta)
-    sum_J = np.nansum(data, axis=0)
-    beta += lr * (-sum_J + np.nansum(sigmoid(diff_mat), axis=0))
+    beta += lr * np.nansum(-data + sigmoid(diff_mat), axis=0)
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -130,8 +128,8 @@ def main():
     # Tune learning rate and number of iterations. With the implemented #
     # code, report the validation and test accuracy.                    #
     #####################################################################
-    lr = 0.002
-    num_iteration = 100
+    lr = 0.01
+    num_iteration = 200
     # train model
     theta, beta, val_acc_lst = irt(sparse_matrix, val_data, lr, num_iteration)
     # evaluate final accuracy
