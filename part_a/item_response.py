@@ -133,6 +133,7 @@ def main():
     # train model
     theta, beta, val_acc_lst = irt(sparse_matrix, val_data, lr, num_iteration)
     # evaluate final accuracy
+    print(f"train accuracy is {evaluate(train_data, theta, beta)}")
     print(f"valid accuracy is {evaluate(val_data, theta, beta)}")
     print(f"test accuracy is {evaluate(test_data, theta, beta)}")
     #####################################################################
