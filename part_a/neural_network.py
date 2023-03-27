@@ -8,7 +8,7 @@ import torch.utils.data
 
 import numpy as np
 import torch
-
+import matplotlib.pyplot as plt
 
 def load_data(base_path="../data"):
     """ Load the data in PyTorch Tensor.
@@ -70,7 +70,7 @@ class AutoEncoder(nn.Module):
         # Implement the function as described in the docstring.             #
         # Use sigmoid activations for f and g.                              #
         #####################################################################
-        out = inputs
+        out = F.sigmoid(self.h(F.sigmoid(self.g(inputs))))
         #####################################################################
         #                       END OF YOUR CODE                            #
         #####################################################################
@@ -114,6 +114,11 @@ def train(model, lr, lamb, train_data, zero_train_data, valid_data, num_epoch):
             target[0][nan_mask] = output[0][nan_mask]
 
             loss = torch.sum((output - target) ** 2.)
+
+            # Add L2 regularization to the loss function.
+            weight_norm = model.get_weight_norm()
+            loss += (lamb / 2) * weight_norm
+
             loss.backward()
 
             train_loss += loss.item()
@@ -162,16 +167,31 @@ def main():
     # validation set.                                                   #
     #####################################################################
     # Set model hyperparameters.
-    k = None
-    model = None
+    k_set = [10, 50, 100, 200]
+    best_k = None
+    best_valid_acc = 0.0
 
-    # Set optimization hyperparameters.
-    lr = None
-    num_epoch = None
-    lamb = None
+    for k in k_set:
 
-    train(model, lr, lamb, train_matrix, zero_train_matrix,
-          valid_data, num_epoch)
+        model = AutoEncoder(train_matrix.shape[1], k)
+
+        # Set optimization hyperparameters.
+        lr = 0.001
+        num_epoch = 20
+        lamb = 0.01
+
+        train(model, lr, lamb, train_matrix, zero_train_matrix,
+              valid_data, num_epoch)
+
+        valid_acc = evaluate(model, zero_train_matrix, valid_data)
+        print("k = {}, valid_acc = {}".format(k, valid_acc))
+
+        if valid_acc > best_valid_acc:
+            best_k = k
+            best_valid_acc = valid_acc
+
+    print("best_k = {}, best_valid_acc = {}".format(best_k, best_valid_acc))
+
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
