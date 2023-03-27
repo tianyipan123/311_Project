@@ -3,11 +3,12 @@ from utils import *
 import numpy as np
 import matplotlib.pyplot as plt
 
+NUM_ITERATION = 300
 
 def sigmoid(x):
     """ Apply sigmoid function.
     """
-    return np.exp(x) / (1 + np.exp(x))
+    return np.where(x >= 0, 1 / (1 + np.exp(-x)), np.exp(x) / (1 + np.exp(x)))
 
 
 def neg_log_likelihood(data, theta, beta, a):
@@ -28,7 +29,7 @@ def neg_log_likelihood(data, theta, beta, a):
     return -log_lklihood
 
 
-def update_parameters(data, lr, theta, beta, a):
+def update_parameters(data, lr, lr_a, theta, beta, a):
     """ Update theta, beta, and c using gradient descent.
 
     :param data: 2D sparse matrix
@@ -53,13 +54,14 @@ def update_parameters(data, lr, theta, beta, a):
                            sigmoid(diff_mat), axis=0)
 
     # update a
-    # exp_mat = create_exp_diff_mat(data.shape, theta, beta)
-    # a += lr * np.nansum(data / (a_mat + exp_mat) +
-    #                     (data - 1) / (1 - a_mat), axis=1)
+    exp_mat = create_exp_diff_mat(data.shape, theta, beta)
+    a += lr_a * np.nansum(data / (a_mat + exp_mat) -
+                        (1 - data) / (1 - a_mat), axis=1)
+
     return theta, beta, a
 
 
-def irt(data, val_data, lr, iterations):
+def irt(data, val_data, lr, lr_a, iterations):
     """ Train IRT model.
 
     :param data: 2D sparse matrix
@@ -73,18 +75,20 @@ def irt(data, val_data, lr, iterations):
     shape = data.shape
     theta = np.random.randn(shape[0])
     beta = np.random.randn(shape[1])
-    a = np.ones(shape[0]) * 0.15
+    a = np.random.randn(shape[0])
+    lld_list = []
     val_acc_lst = []
 
     # training iteration
     for i in range(iterations):
         neg_lld = neg_log_likelihood(data, theta=theta, beta=beta, a=a)
         score = evaluate(data=val_data, theta=theta, beta=beta, a=a)
+        lld_list.append(neg_lld)
         val_acc_lst.append(score)
         print("NLLK: {} \t Score: {}".format(neg_lld, score))
-        theta, beta, a = update_parameters(data, lr, theta, beta, a)
+        theta, beta, a = update_parameters(data, lr, lr_a, theta, beta, a)
 
-    return theta, beta, a, val_acc_lst
+    return theta, beta, a, lld_list, val_acc_lst
 
 
 def evaluate(data, theta, beta, a):
@@ -115,17 +119,17 @@ def main():
     test_data = load_public_test_csv("../data")
 
     # learning
-    lr = 0.05
-    num_iteration = 70
+    lr = 0.001
+    lr_a = lr / 7
 
     # train model
-    theta, beta, a, val_acc_lst = irt(sparse_matrix, val_data, lr, num_iteration)
+    theta, beta, a, lld_list, val_acc_lst = irt(sparse_matrix, val_data, lr, lr_a, NUM_ITERATION)
 
     # evaluate accuracy
     print(f"train accuracy is {evaluate(train_data, theta, beta, a)}")
     print(f"valid accuracy is {evaluate(val_data, theta, beta, a)}")
     print(f"test accuracy is {evaluate(test_data, theta, beta, a)}")
-    return theta, beta, a
+    return theta, beta, a, lld_list, val_acc_lst
 
 
 def create_diff_mat(shape, theta, beta):
@@ -155,4 +159,13 @@ def create_exp_diff_mat(shape, theta, beta):
 
 
 if __name__ == "__main__":
-    theta, beta, a = main()
+    theta, beta, a, lld_list, val_acc_lst = main()
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+
+    ax1.plot(np.arange(NUM_ITERATION), lld_list, 'b')
+    ax2.plot(np.arange(NUM_ITERATION), val_acc_lst, 'r')
+    ax1.set_xlabel("#iteraion")
+    ax1.set_ylabel("negative log-likelihood")
+    ax2.set_ylabel("validation accuracy")
+    plt.show()
