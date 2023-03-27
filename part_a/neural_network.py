@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
+
 def load_data(base_path="../data"):
     """ Load the data in PyTorch Tensor.
 
@@ -77,7 +78,7 @@ class AutoEncoder(nn.Module):
         return out
 
 
-def train(model, lr, lamb, train_data, zero_train_data, valid_data, num_epoch):
+def train(model, lr, lamb, train_data, zero_train_data, valid_data, num_epoch, plot_needed, regularization_needed):
     """ Train the neural network, where the objective also includes
     a regularizer.
 
@@ -88,16 +89,22 @@ def train(model, lr, lamb, train_data, zero_train_data, valid_data, num_epoch):
     :param zero_train_data: 2D FloatTensor
     :param valid_data: Dict
     :param num_epoch: int
+    :param plot_needed: bool
+    :param regularization_needed: bool
     :return: None
     """
     # TODO: Add a regularizer to the cost function. 
-    
+
     # Tell PyTorch you are training the model.
     model.train()
 
     # Define optimizers and loss function.
     optimizer = optim.SGD(model.parameters(), lr=lr)
     num_student = train_data.shape[0]
+
+    # Define set of losses
+    train_losses = []
+    valid_losses = []
 
     for epoch in range(0, num_epoch):
         train_loss = 0.
@@ -115,9 +122,10 @@ def train(model, lr, lamb, train_data, zero_train_data, valid_data, num_epoch):
 
             loss = torch.sum((output - target) ** 2.)
 
-            # Add L2 regularization to the loss function.
-            weight_norm = model.get_weight_norm()
-            loss += (lamb / 2) * weight_norm
+            if regularization_needed:
+                # Add L2 regularization to the loss function.
+                weight_norm = model.get_weight_norm()
+                loss += (lamb / 2) * weight_norm
 
             loss.backward()
 
@@ -125,8 +133,17 @@ def train(model, lr, lamb, train_data, zero_train_data, valid_data, num_epoch):
             optimizer.step()
 
         valid_acc = evaluate(model, zero_train_data, valid_data)
-        print("Epoch: {} \tTraining Cost: {:.6f}\t "
-              "Valid Acc: {}".format(epoch, train_loss, valid_acc))
+
+        # Store the training and validation losses for this epoch.
+        train_losses.append(train_loss)
+        valid_losses.append(valid_acc)
+
+        if not plot_needed:
+            print("Epoch: {} \tTraining Cost: {:.6f}\t "
+                  "Valid Acc: {}".format(epoch, train_loss, valid_acc))
+
+    if plot_needed:
+        plot_train(train_losses, valid_losses, num_epoch)
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -158,6 +175,29 @@ def evaluate(model, train_data, valid_data):
     return correct / float(total)
 
 
+def plot_train(train_losses, valid_accs, num_epoch):
+    """
+    # Plot the training and validation losses
+    """
+    epoch = range(num_epoch)
+
+    # plot training losses
+    plt.figure(figsize=(10, 5))
+    plt.plot(epoch, train_losses, color='blue')
+    plt.xlabel('Epochs')
+    plt.ylabel('Training Loss')
+    plt.title('Training Loss vs Epochs')
+    plt.show()
+
+    # plot validation accuracy
+    plt.figure(figsize=(10, 5))
+    plt.plot(epoch, valid_accs, color='orange')
+    plt.xlabel('Epochs')
+    plt.ylabel('Validation Accuracy')
+    plt.title('Validation Accuracy vs Epochs')
+    plt.show()
+
+
 def main():
     zero_train_matrix, train_matrix, valid_data, test_data = load_data()
 
@@ -167,21 +207,22 @@ def main():
     # validation set.                                                   #
     #####################################################################
     # Set model hyperparameters.
-    k_set = [10, 50, 100, 200]
+    k_set = [10, 50, 100, 200, 500]
+    # k_set = [500]
     best_k = None
     best_valid_acc = 0.0
+
+    # Set optimization hyperparameters.
+    lr = 0.001
+    num_epoch = 50
+    lamb = 0.01
 
     for k in k_set:
 
         model = AutoEncoder(train_matrix.shape[1], k)
 
-        # Set optimization hyperparameters.
-        lr = 0.001
-        num_epoch = 20
-        lamb = 0.01
-
         train(model, lr, lamb, train_matrix, zero_train_matrix,
-              valid_data, num_epoch)
+              valid_data, num_epoch, False, True)
 
         valid_acc = evaluate(model, zero_train_matrix, valid_data)
         print("k = {}, valid_acc = {}".format(k, valid_acc))
@@ -191,6 +232,10 @@ def main():
             best_valid_acc = valid_acc
 
     print("best_k = {}, best_valid_acc = {}".format(best_k, best_valid_acc))
+
+    model = AutoEncoder(train_matrix.shape[1], best_k)
+    train(model, lr, lamb, train_matrix, zero_train_matrix,
+          valid_data, num_epoch, True, True)
 
     #####################################################################
     #                       END OF YOUR CODE                            #
