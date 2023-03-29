@@ -4,19 +4,23 @@ from sklearn.impute import KNNImputer
 from math import ceil
 
 import item_response
+import neural_network
+import torch
 
 
-def bootstrap(data):
-    """Returns a dataset sampled with replacement from the given data.
+def bag(data, num_bags):
+    """Returns num_bags datasets sampled with replacement from the given data.
     """
-    return resample(data)
-
+    bags = []
+    for i in range(num_bags):
+        bags.append(resample(data, replace=True))
+    return bags
 
 def train_knn(data, k):
     """Randomly samples the data, and returns a trained KNN model with hyperparameter k.
     """
     nbrs = KNNImputer(n_neighbors=k)
-    mat = nbrs.fit_transform(bootstrap(data).toarray())
+    mat = nbrs.fit_transform(data.toarray())
     return mat
 
 
@@ -24,7 +28,6 @@ def train_irt(data, lr, iterations):
     """Randomly samples the data, and returns a trained IRT model with hyperparemeters
     lr and iterations.
     """
-    data = bootstrap(data)
     shape = data.shape
     theta = np.random.randn(shape[0])
     beta = np.random.randn(shape[1])
@@ -34,15 +37,15 @@ def train_irt(data, lr, iterations):
     return theta, beta
 
 
-def knn_predict(train_data, valid_data, k):
+def knn_predict(train_data, valid_data, test_data, k):
     """Trains a KNN model with given k on train_data, then
     returns the predictions on valid_data.
     """
     matrix = train_knn(train_data, k)
-    return sparse_matrix_predictions(valid_data, matrix)
+    return sparse_matrix_predictions(valid_data, matrix), sparse_matrix_predictions(test_data, matrix)
 
 
-def IRT_predict(train_data, valid_data, lr, iterations):
+def IRT_predict(train_data, valid_data, test_data, lr, iterations):
     """Trains an IRT model with hyperparameters lr, iterations on train_data, then
     returns predictions on valid_data.
 
@@ -51,27 +54,54 @@ def IRT_predict(train_data, valid_data, lr, iterations):
     """
     theta, beta = train_irt(train_data, lr, iterations)
     pred = []
+    t_pred = []
     for i, q in enumerate(valid_data["question_id"]):
         u = valid_data["user_id"][i]
         x = (theta[u] - beta[q]).sum()
         p_a = item_response.sigmoid(x)
         pred.append(p_a >= 0.5)
 
-    return np.array(pred)
+    for i, q in enumerate(test_data["question_id"]):
+        u = test_data["user_id"][i]
+        x = (theta[u] - beta[q]).sum()
+        p_a = item_response.sigmoid(x)
+        t_pred.append(p_a >= 0.5)
 
+    return np.array(pred), np.array(t_pred)
 
-def majority(*predictions):
+def train_and_predict_nn(train_data, valid_data, test_data, k, lr, lamb, num_epoch):
+    zero_train_matrix = train_data.copy()
+    # Fill in the missing entries to 0.
+    zero_train_matrix[np.isnan(train_data)] = 0
+    # Change to Float Tensor for PyTorch.
+    zero_train_matrix = torch.FloatTensor(zero_train_matrix)
+    train_data = torch.FloatTensor(train_data)
+    model = neural_network.AutoEncoder(train_data.shape[1], k)
+
+    neural_network.train(model, lr, lamb, train_data, zero_train_matrix,
+              valid_data, num_epoch, False, True)
+    
+    predictions = []
+    test_predictions = []
+    for i, u in enumerate(valid_data["user_id"]):
+        inputs = torch.autograd.Variable(zero_train_matrix[u]).unsqueeze(0)
+        output = model(inputs)
+        guess = output[0][valid_data["question_id"][i]].item() >= 0.5
+        predictions.append(guess)
+
+    for i, u in enumerate(test_data["user_id"]):
+        inputs = torch.autograd.Variable(zero_train_matrix[u]).unsqueeze(0)
+        output = model(inputs)
+        guess = output[0][test_data["question_id"][i]].item() >= 0.5
+        test_predictions.append(guess)
+
+    return predictions, test_predictions
+
+def majority(predictions):
+    """Returns the majority vote of the given predidctions."""
     majority = np.array(predictions, dtype=int)
     assert majority.shape[0] == len(predictions)
     half = ceil(len(predictions) / 2)
-
-    # for i in range(0, len(predictions[0])):
-    #     count = 0
-    #     for pred in predictions:
-    #         if pred[i]:
-    #                 count += 1
-    #
-    #     majority.append(count >= half)
     return majority.sum(axis=0) >= half
 
 
@@ -82,21 +112,57 @@ def main():
 
     # Hyperparameters for IRT
     lr = 0.002
-    num_iteration = 100
+    num_iteration = 50
 
     # Hyperparameters for KNN
-    k = 20
+    k = 100
 
-    pred1 = knn_predict(sparse_matrix, val_data, k)
-    pred2 = IRT_predict(sparse_matrix, val_data, lr, num_iteration)
-    pred3 = knn_predict(sparse_matrix, val_data, 25)
-    pred = majority(pred1, pred2, pred3)
+    # Hyperparameters for NN
+    hl = 250
+    nnlr = 0.002
+    num_epoch = 30
 
-    knn_accuracy = evaluate(val_data, pred1)
-    irt_accuracy = evaluate(val_data, pred2)
-    ensemble_accuracy = evaluate(val_data, pred)
-    print(f"Ensemble validation accuracy is: {ensemble_accuracy}, KNN validation accuracy is: {knn_accuracy}, IRT validation accuracy is: {irt_accuracy}")
+    # Number of bags (should be divisible by 3)
+    N = 9
 
+    datasets = bag(sparse_matrix, N)
+    val_predictions = []
+    t_predictions = []
+    for i in range(N // 3):
+        val_preds, test_preds = IRT_predict(datasets[i], val_data, test_data, lr, num_iteration)
+        val_predictions.append(val_preds)
+        t_predictions.append(test_preds)
+
+    for i in range(N // 3, 2 * N // 3): 
+        val_preds, test_preds = knn_predict(datasets[i], val_data, test_data, k)
+        val_predictions.append(val_preds)
+        t_predictions.append(test_preds)
+
+    for i in range(2 * N // 3, N):
+        val_preds, test_preds = train_and_predict_nn(
+            datasets[i].toarray(),
+            val_data, 
+            test_data,
+            hl,
+            nnlr,
+            0.01,
+            num_epoch
+        )
+        val_predictions.append(val_preds)
+        t_predictions.append(test_preds)
+
+    val_averaged_prediction = majority(val_predictions)
+    t_averaged_prediction = majority(t_predictions)
+
+    print(f"KNN validation accuracy is: {evaluate(val_data, val_predictions[0])}")
+    print(f"IRT validation accuracy is: {evaluate(val_data, val_predictions[N // 3])}")
+    print(f"NN validation accuracy is: {evaluate(val_data, val_predictions[N-1])}")
+    print(f"Ensembled validation accuracy is: {evaluate(val_data, val_averaged_prediction)}")
+
+    print(f"KNN test accuracy is: {evaluate(test_data, t_predictions[0])}")
+    print(f"IRT test accuracy is: {evaluate(test_data, t_predictions[N // 3])}")
+    print(f"NN test accuracy is: {evaluate(test_data, t_predictions[N-1])}")
+    print(f"Ensembled test accuracy is: {evaluate(test_data, t_averaged_prediction)}")
 
 if __name__ == "__main__":
     main()
