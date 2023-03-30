@@ -85,9 +85,12 @@ def irt(data, val_data, lr, iterations):
     beta = np.random.randn(shape[1])
 
     val_acc_lst = []
+    lld_list = []
+    val_lld_lst = []
 
     for i in range(iterations):
         neg_lld = neg_log_likelihood(data, theta=theta, beta=beta)
+        lld_list.append(neg_lld)
         score = evaluate(data=val_data, theta=theta, beta=beta)
         val_acc_lst.append(score)
         print("NLLK: {} \t Score: {}".format(neg_lld, score))
@@ -178,3 +181,12 @@ def create_diff_mat(shape, theta, beta):
 
 if __name__ == "__main__":
     main()
+    # fig, ax1 = plt.subplots()
+    # ax2 = ax1.twinx()
+    #
+    # ax1.plot(np.arange(200), lld_list, 'b')
+    # ax2.plot(np.arange(200), val_lld_lst, 'r')
+    # ax1.set_xlabel("#iteraion")
+    # ax1.set_ylabel("negative log-likelihood")
+    # ax2.set_ylabel("validation accuracy")
+    # plt.show()

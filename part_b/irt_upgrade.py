@@ -3,7 +3,8 @@ from utils import *
 import numpy as np
 import matplotlib.pyplot as plt
 
-NUM_ITERATION = 300
+NUM_ITERATION = 100
+THRESHOLD = 0
 
 def sigmoid(x):
     """ Apply sigmoid function.
@@ -40,6 +41,8 @@ def update_parameters(data, lr, lr_a, theta, beta, a):
     :return: tuple of vectors
     """
     data = data.toarray()
+    global THRESHOLD
+    THRESHOLD = THRESHOLD + 1
     # update theta
     diff_mat = create_diff_mat(data.shape, theta, beta)
     exp_mat = np.exp(diff_mat)
@@ -54,9 +57,10 @@ def update_parameters(data, lr, lr_a, theta, beta, a):
                            sigmoid(diff_mat), axis=0)
 
     # update a
-    exp_mat = create_exp_diff_mat(data.shape, theta, beta)
-    a += lr_a * np.nansum(data / (a_mat + exp_mat) -
-                        (1 - data) / (1 - a_mat), axis=1)
+    if THRESHOLD > 30:
+        exp_mat = create_exp_diff_mat(data.shape, theta, beta)
+        a += lr_a * np.nansum(data / (a_mat + exp_mat) -
+                            (1 - data) / (1 - a_mat), axis=1)
 
     return theta, beta, a
 
@@ -75,7 +79,7 @@ def irt(data, val_data, lr, lr_a, iterations):
     shape = data.shape
     theta = np.random.randn(shape[0])
     beta = np.random.randn(shape[1])
-    a = np.random.randn(shape[0])
+    a = np.zeros(shape[0])
     lld_list = []
     val_acc_lst = []
 
@@ -119,8 +123,8 @@ def main():
     test_data = load_public_test_csv("../data")
 
     # learning
-    lr = 0.001
-    lr_a = lr / 7
+    lr = 0.01
+    lr_a = lr / 10
 
     # train model
     theta, beta, a, lld_list, val_acc_lst = irt(sparse_matrix, val_data, lr, lr_a, NUM_ITERATION)
