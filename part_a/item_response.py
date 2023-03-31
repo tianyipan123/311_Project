@@ -2,6 +2,7 @@ from utils import *
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.sparse import csc_matrix
 
 
 def sigmoid(x):
@@ -88,16 +89,22 @@ def irt(data, val_data, lr, iterations):
     lld_list = []
     val_lld_lst = []
 
+    val_matrix = valid_data_to_sparse()
+
     for i in range(iterations):
+        # Evaluation
         neg_lld = neg_log_likelihood(data, theta=theta, beta=beta)
         lld_list.append(neg_lld)
+        val_neg_lld = neg_log_likelihood(val_matrix, theta=theta, beta=beta)
+        val_lld_lst.append(val_neg_lld)
         score = evaluate(data=val_data, theta=theta, beta=beta)
         val_acc_lst.append(score)
+        # Update
         print("NLLK: {} \t Score: {}".format(neg_lld, score))
         theta, beta = update_theta_beta(data, lr, theta, beta)
 
     # TODO: You may change the return values to achieve what you want.
-    return theta, beta, val_acc_lst
+    return theta, beta, val_acc_lst, lld_list, val_lld_lst
 
 
 def evaluate(data, theta, beta):
@@ -134,7 +141,7 @@ def main():
     lr = 0.01
     num_iteration = 200
     # train model
-    theta, beta, val_acc_lst = irt(sparse_matrix, val_data, lr, num_iteration)
+    theta, beta, val_acc_lst, lld_list, val_lld_list = irt(sparse_matrix, val_data, lr, num_iteration)
     # evaluate final accuracy
     print(f"train accuracy is {evaluate(train_data, theta, beta)}")
     print(f"valid accuracy is {evaluate(val_data, theta, beta)}")
@@ -158,6 +165,7 @@ def main():
     plt.title(r"Probability of Correctness vs. $\theta$")
     plt.legend()
     plt.show()
+    return lld_list, val_lld_list
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
@@ -179,14 +187,33 @@ def create_diff_mat(shape, theta, beta):
     return inner_mat
 
 
+def valid_data_to_sparse():
+    """Convert validation set (dictionary) to sparse matrix.
+    """
+    # get matrix size
+    sparse_matrix = load_train_sparse("../data")
+    # load and prepare data
+    val_data = load_valid_csv("../data")
+    valid_matrix = np.empty(sparse_matrix.shape)
+    # store into matrix form
+    for i, q in enumerate(val_data["question_id"]):
+        u = val_data["user_id"][i]
+        valid_matrix[u, q] = val_data["is_correct"][i]
+    return csc_matrix(valid_matrix)
+
+
 if __name__ == "__main__":
-    main()
-    # fig, ax1 = plt.subplots()
-    # ax2 = ax1.twinx()
-    #
-    # ax1.plot(np.arange(200), lld_list, 'b')
-    # ax2.plot(np.arange(200), val_lld_lst, 'r')
-    # ax1.set_xlabel("#iteraion")
-    # ax1.set_ylabel("negative log-likelihood")
-    # ax2.set_ylabel("validation accuracy")
-    # plt.show()
+    lld_list, val_lld_list = main()
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+
+    lns1 = ax1.plot(np.arange(200), lld_list, 'b')
+    lns2 = ax2.plot(np.arange(200), val_lld_list, 'r')
+    # set labels
+    lns = lns1 + lns2
+    labs = ["train", "validation"]
+    ax1.legend(lns, labs, loc=0)
+    ax1.set_xlabel("#iteraion")
+    ax1.set_ylabel("train negative log-likelihood")
+    ax2.set_ylabel("test negative log-likelihood")
+    plt.show()
